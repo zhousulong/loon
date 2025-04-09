@@ -1,0 +1,52 @@
+name: Update Adobe Blocklist
+
+on:
+  schedule:
+    # 每天凌晨3点运行 (UTC时间，根据需要调整)
+    - cron: '0 3 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  update-blocklist:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Download and transform blocklist
+        run: |
+          # 下载原始阻止名单
+          curl -s "https://raw.githubusercontent.com/brolysan/teamRCV/refs/heads/main/blocage%20adobe.txt" > adobe_original.txt
+          
+          # 转换格式从 "0.0.0.0 domain.com" 到 "DOMAIN,domain.com"
+          awk '{
+            # 移除前导和尾部空格
+            gsub(/^[ \t]+|[ \t]+$/, "")
+            
+            # 跳过空行和注释行
+            if ($0 == "" || substr($0, 1, 1) == "#") next
+            
+            # 如果行以0.0.0.0开始，提取域名并输出新格式
+            if ($1 == "0.0.0.0" && $2 != "") {
+              print "DOMAIN," $2
+            }
+          }' adobe_original.txt > "blocage adobe.list"
+          
+          # 清理临时文件
+          rm adobe_original.txt
+          
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --exit-code "blocage adobe.list" || echo "changes=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+        
+      - name: Commit and push if changed
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add "blocage adobe.list"
+          git commit -m "自动更新 Adobe 阻止名单 $(date +'%Y-%m-%d')"
+          git push
