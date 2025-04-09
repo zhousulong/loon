@@ -9,44 +9,46 @@ on:
 jobs:
   update-blocklist:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-        
+
       - name: Download and transform blocklist
         run: |
-          # 下载原始阻止名单
-          curl -s "https://raw.githubusercontent.com/brolysan/teamRCV/refs/heads/main/blocage%20adobe.txt" > adobe_original.txt
-          
-          # 转换格式从 "0.0.0.0 domain.com" 到 "DOMAIN,domain.com"
+          echo "Downloading blocklist..."
+          curl -s -f -L "https://raw.githubusercontent.com/brolysan/teamRCV/main/blocage%20adobe.txt" -o adobe_original.txt
+
+          echo "Transforming blocklist..."
           awk '{
-            # 移除前导和尾部空格
             gsub(/^[ \t]+|[ \t]+$/, "")
-            
-            # 跳过空行和注释行
             if ($0 == "" || substr($0, 1, 1) == "#") next
-            
-            # 如果行以0.0.0.0开始，提取域名并输出新格式
             if ($1 == "0.0.0.0" && $2 != "") {
               print "DOMAIN," $2
             }
           }' adobe_original.txt > "blocage adobe.list"
-          
-          # 清理临时文件
+
+          echo "Transformed list content:"
+          cat "blocage adobe.list"
+
           rm adobe_original.txt
-          
+
       - name: Check for changes
         id: check_changes
         run: |
-          git diff --exit-code "blocage adobe.list" || echo "changes=true" >> $GITHUB_OUTPUT
-        continue-on-error: true
-        
+          if git status --porcelain | grep "blocage adobe.list"; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes detected."
+          fi
+
       - name: Commit and push if changed
         if: steps.check_changes.outputs.changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.email "parabola@vip.qq.com"
+          git config --local user.name "zhousulong"
           git add "blocage adobe.list"
           git commit -m "自动更新 Adobe 阻止名单 $(date +'%Y-%m-%d')"
-          git push
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} HEAD:main
